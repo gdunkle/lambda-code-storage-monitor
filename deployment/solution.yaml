@@ -45,6 +45,9 @@ Resources:
                 Action:
                   - lambda:ListFunctions
                   - lambda:ListVersionsByFunction
+                  - lambda:ListLayers
+                  - lambda:ListLayerVersions
+                  - lambda:GetLayerVersion
                 Resource:
                   - '*'
               - Effect: Allow

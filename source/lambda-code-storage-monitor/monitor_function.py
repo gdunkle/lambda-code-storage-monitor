@@ -35,57 +35,138 @@ DEFAULT_PAGE_SIZE = int(os.environ.get('PAGE_SIZE'))
 
 
 def lambda_handler(event, context):
-    try:
-        logging.debug(event)
-        results = get_function_sizes()
-        publish_total_size_metric(results)
-        result = {
-            'statusCode': '200',
-            'results': results
-        }
-        return json.dumps(result)
-    except Exception as error:
-        logging.error('lambda_handler error: %s' % error)
-        logging.error('lambda_handler trace: %s' % traceback.format_exc())
-        result = {
-            'statusCode': '500',
-            'body': {'message': 'error'}
-        }
-        return json.dumps(result)
+    logging.debug(event)
+    function_results = get_function_sizes()
+    layer_results = get_layer_sizes()
+    publish_total_size_metric(function_results, layer_results)
+    result = {
+        'statusCode': '200',
+        'function_results': function_results,
+        'layer_results': layer_results
+    }
+    return json.dumps(result)
 
 
-def publish_total_size_metric(results: dict):
-    metricData = [
+def publish_total_size_metric(function_results: dict, layer_results: dict):
+    metric_data = [
         {
             'MetricName': 'Code Size',
             'Dimensions': [
                 {
-                    'Name': 'Code Size',
-                    'Value': 'All Functions'
+                    'Name': 'Functions',
+                    'Value': 'Total'
                 },
             ],
-            'Value': results["Total"],
+            'Value': function_results["Total"],
 
             'Unit': 'Bytes'
 
         },
-    ]
-    for name, sizes in results["Functions"].items():
-        metricData.append({
-            'MetricName': 'CodeSize',
+        {
+            'MetricName': 'Code Size',
             'Dimensions': [
                 {
-                    'Name': 'Code Size',
+                    'Name': 'Layers',
+                    'Value': 'Total'
+                },
+            ],
+            'Value': layer_results["Total"],
+
+            'Unit': 'Bytes'
+
+        },
+        {
+            'MetricName': 'Code Size',
+            'Dimensions': [
+                {
+                    'Name': 'All Code',
+                    'Value': 'Total'
+                },
+            ],
+            'Value': layer_results["Total"]+function_results["Total"],
+
+            'Unit': 'Bytes'
+
+        }
+    ]
+
+    for name, sizes in function_results["Functions"].items():
+        metric_data.append({
+            'MetricName': 'Code Size',
+            'Dimensions': [
+                {
+                    'Name': 'Functions',
                     'Value': name
                 },
             ],
             'Value': sizes["Total"],
             'Unit': 'Bytes'
         })
+    for name, sizes in layer_results["Layers"].items():
+        metric_data.append({
+            'MetricName': 'Code Size',
+            'Dimensions': [
+                {
+                    'Name': 'Layers',
+                    'Value': name
+                },
+            ],
+            'Value': sizes["Total"],
+            'Unit': 'Bytes'
+        })
+
     cloud_watch_client.put_metric_data(
         Namespace='Custom/Lambda',
-        MetricData=metricData
+        MetricData=metric_data
     )
+
+
+def get_layer_sizes(results: dict = {}) -> dict:
+    marker = results["NextMarker"] if "NextMarker" in results.keys() else None
+    results["Layers"] = layers = results["Layers"] if "Layers" in results.keys() else {}
+    total = results["Total"] if "Total" in results.keys() else 0
+    args = {"MaxItems": DEFAULT_PAGE_SIZE}
+    if marker is not None:
+        args["Marker"] = marker
+    response = lambda_client.list_layers(**args)
+    results["NextMarker"] = response['NextMarker'] if "NextMarker" in response.keys() else None
+    for layer in response['Layers']:
+        layer_name = layer["LayerName"]
+        version_sizes = get_layer_version_sizes(layer_name)
+        if version_sizes["Layers"] is not None:
+            layers.update(version_sizes["Layers"])
+        if version_sizes["Total"] is not None:
+            total += version_sizes["Total"]
+    results["Total"] = total
+    if results["NextMarker"] is not None:
+        results = get_layer_sizes(results)
+    return results
+
+
+def get_layer_version_sizes(layer_name: str, results: dict = {}) -> dict:
+    marker = results["NextMarker"] if "NextMarker" in results.keys() else None
+    results["Layers"] = layers = results["Layers"] if "Layers" in results.keys() else {}
+    total = results["Total"] if "Total" in results.keys() else 0
+    args = {"MaxItems": DEFAULT_PAGE_SIZE, "LayerName": layer_name}
+    if marker is not None:
+        args["Marker"] = marker
+    response = lambda_client.list_layer_versions(**args)
+    results["NextMarker"] = response['NextMarker'] if "NextMarker" in response.keys() else None
+    for fn in response['LayerVersions']:
+        layer_version = fn["Version"]
+        get_layer_version_response = lambda_client.get_layer_version(LayerName=layer_name, VersionNumber=layer_version)
+        layer_size = get_layer_version_response["Content"]["CodeSize"]
+        logging.debug(f"{layer_name}:{layer_version} = {layer_size}")
+        layers[layer_name] = versions = layers[layer_name] if layer_name in layers.keys() else {}
+        versions[layer_version] = layer_size
+        sub_total = versions["Total"] if "Total" in versions.keys() else 0
+        sub_total += layer_size
+        versions["Total"] = sub_total
+        total += layer_size
+    results["Total"] = total
+    if results["NextMarker"] is not None:
+        results = get_layer_version_sizes(layer_name, results)
+    return results
 
 
 def get_function_sizes(results: dict = {}) -> dict:
@@ -149,3 +230,5 @@ def init_logger():
 
 
 init_logger()
+if __name__ == "__main__":
+    lambda_handler({},{})
