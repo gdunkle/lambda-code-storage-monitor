@@ -1,0 +1,88 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Description: lambda-code-storage-monitor - Publishes a custom metric to monitor code storage
+
+Parameters:
+
+  Default:
+    Description: Default parameter
+    Type: String
+    Default: Default
+
+Mappings:
+
+  MetricsMap:
+    Send-Data:
+      SendAnonymousData: "Yes" # change to 'No' if needed
+
+  SourceCode:
+    General:
+      S3Bucket: %%BUCKET_NAME%%
+      KeyPrefix: "%%SOLUTION_NAME%%/%%VERSION%%"
+
+Resources:
+
+  MonitorFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Path: /
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
+      Policies:
+        - PolicyName: !Sub DefaultFunction-Policy-${AWS::StackName}-${AWS::Region}
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - lambda:ListFunctions
+                  - lambda:ListVersionsByFunction
+                Resource:
+                  - '*'
+              - Effect: Allow
+                Action:
+                  - cloudwatch:PutMetricData
+                Resource:
+                  - '*'
+  MonitorFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Description: Place holder for lambda function
+      Environment:
+        Variables:
+          LOG_LEVEL: 'DEBUG' # change to WARN, ERROR or DEBUG as needed
+          PAGE_SIZE: 25
+      Handler: monitor_function.lambda_handler
+      Role: !GetAtt MonitorFunctionRole.Arn
+      Code:
+        S3Bucket: !Join ["-", [!FindInMap ["SourceCode", "General", "S3Bucket"], Ref: "AWS::Region"]]
+        S3Key: !Join ["/", [!FindInMap ["SourceCode", "General", "KeyPrefix"],  "%%ZIP_FILE_NAME%%"]]
+      Runtime: python3.8
+      Layers:
+        - !Ref DefaultLayer
+      Timeout: 30
+  MonitorFunctionVersion:
+    Type: AWS::Lambda::Version
+    Properties:
+      Description: !Sub "Latest version of ${MonitorFunction}"
+      FunctionName: !GetAtt MonitorFunction.Arn
+  DefaultLayer:
+    Type: AWS::Lambda::LayerVersion
+    Properties:
+      CompatibleRuntimes:
+        - python3.8
+      Content:
+        S3Bucket: !Join ["-", [!FindInMap ["SourceCode", "General", "S3Bucket"], Ref: "AWS::Region"]]
+        S3Key: !Join ["/", [!FindInMap ["SourceCode", "General", "KeyPrefix"],  "%%LAYER_FILE_NAME%%"]]
+      Description: Layer for lambda-code-storage-monitor
+      LayerName: lambda-code-storage-monitor-layer
+
+            
