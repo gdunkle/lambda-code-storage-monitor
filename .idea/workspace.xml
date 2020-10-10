@@ -41,7 +41,6 @@
         <env name="PYTHONUNBUFFERED" value="1" />
         <env name="PAGE_SIZE" value="25" />
         <env name="LOG_LEVEL" value="DEBUG" />
-        <env name="AWS_DEFAULT_REGION" value="us-east-2" />
       </envs>
       <option name="SDK_HOME" value="$PROJECT_DIR$/.venv/bin/python" />
       <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/source/lambda-code-storage-monitor" />
@@ -72,7 +71,7 @@
       <option name="presentableId" value="Default" />
       <updated>1602259953806</updated>
       <workItem from="1602259955443" duration="14010000" />
-      <workItem from="1602358391902" duration="1455000" />
+      <workItem from="1602358391902" duration="1560000" />
     </task>
     <servers />
   </component>
