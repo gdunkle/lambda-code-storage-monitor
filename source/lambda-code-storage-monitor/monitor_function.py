@@ -83,7 +83,7 @@ def publish_total_size_metric(function_results: dict, layer_results: dict):
                     'Value': 'Total'
                 },
             ],
-            'Value': layer_results["Total"]+function_results["Total"],
+            'Value': layer_results["Total"] + function_results["Total"],
 
             'Unit': 'Bytes'
 
@@ -132,7 +132,7 @@ def get_layer_sizes(results: dict = {}) -> dict:
     results["NextMarker"] = response['NextMarker'] if "NextMarker" in response.keys() else None
     for layer in response['Layers']:
         layer_name = layer["LayerName"]
-        version_sizes = get_layer_version_sizes(layer_name)
+        version_sizes = get_layer_version_sizes(layer_name, {})
         if version_sizes["Layers"] is not None:
             layers.update(version_sizes["Layers"])
         if version_sizes["Total"] is not None:
@@ -143,7 +143,7 @@ def get_layer_sizes(results: dict = {}) -> dict:
     return results
 
 
-def get_layer_version_sizes(layer_name: str, results: dict = {}) -> dict:
+def get_layer_version_sizes(layer_name: str, results) -> dict:
     marker = results["NextMarker"] if "NextMarker" in results.keys() else None
     results["Layers"] = layers = results["Layers"] if "Layers" in results.keys() else {}
     total = results["Total"] if "Total" in results.keys() else 0
@@ -180,7 +180,7 @@ def get_function_sizes(results: dict = {}) -> dict:
     results["NextMarker"] = response['NextMarker'] if "NextMarker" in response.keys() else None
     for fn in response['Functions']:
         function_name = fn["FunctionName"]
-        version_sizes = get_function_version_sizes(function_name)
+        version_sizes = get_function_version_sizes(function_name, {})
         if version_sizes["Functions"] is not None:
             functions.update(version_sizes["Functions"])
         if version_sizes["Total"] is not None:
@@ -191,7 +191,7 @@ def get_function_sizes(results: dict = {}) -> dict:
     return results
 
 
-def get_function_version_sizes(function_name: str, results: dict = {}) -> dict:
+def get_function_version_sizes(function_name: str, results) -> dict:
     marker = results["NextMarker"] if "NextMarker" in results.keys() else None
     results["Functions"] = functions = results["Functions"] if "Functions" in results.keys() else {}
     total = results["Total"] if "Total" in results.keys() else 0
@@ -231,4 +231,4 @@ def init_logger():
 
 init_logger()
 if __name__ == "__main__":
-    lambda_handler({},{})
+    lambda_handler({}, {})

@@ -21,7 +21,22 @@ Mappings:
       KeyPrefix: "%%SOLUTION_NAME%%/%%VERSION%%"
 
 Resources:
-
+  RunRule:
+    Type: 'AWS::Events::Rule'
+    Properties:
+      Description: 'Runs the monitor on a schedule'
+      Name: 'lamdba-code-storage-monitor-rule'
+      ScheduleExpression: "rate(2 hours)"
+      Targets:
+        - Arn: !GetAtt MonitorFunction.Arn
+          Id: !Ref MonitorFunction
+  PermissionForRuleToInvokeLambda:
+    Type: 'AWS::Lambda::Permission'
+    Properties:
+      FunctionName: !Ref MonitorFunction
+      Action: "lambda:InvokeFunction"
+      Principal: "events.amazonaws.com"
+      SourceArn: !GetAtt RunRule.Arn
   MonitorFunctionRole:
     Type: AWS::IAM::Role
     Properties:
@@ -87,5 +102,66 @@ Resources:
         S3Key: !Join ["/", [!FindInMap ["SourceCode", "General", "KeyPrefix"],  "%%LAYER_FILE_NAME%%"]]
       Description: Layer for lambda-code-storage-monitor
       LayerName: lambda-code-storage-monitor-layer
-
+  LambdaCodeStorageMonitorNotificationTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: lambda-code-storage-monitor-notification-topic
+      TopicName: lambda-code-storage-monitor-notification-topic
+  LambdaCodeStorageQuotaAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmActions:
+        - !Ref LambdaCodeStorageMonitorNotificationTopic
+      AlarmName: !Sub "lambda-code-storage-quota-alarm"
+      AlarmDescription: Alarm if total lambda code storage get to 80% of quota
+      MetricName: Code Size
+      Namespace: AWS/Lambda
+      Statistic: Average
+      Period: 21600
+      EvaluationPeriods: 1
+      Threshold: 60000000000
+      TreatMissingData: notBreaching
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+        - Name: All Code
+          Value: "Total"
+  Dashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: lambda-code-storage
+      DashboardBody: !Sub |
+        {
+          "start": "-P1D",
+          "periodOverride": "auto",
+          "widgets": [
+                         {
+                           "type": "metric",
+                           "x": 0,
+                           "y": 0,
+                           "width": 24,
+                           "height": 12,
+                           "properties": {
+                             "metrics": [
+                                 [ "Custom/Lambda", "Code Size", "All Code", "Total", { "label": "Total Code Size" } ],
+                                 [ "...", "Layers", ".", { "label": "Layer Code Size" } ],
+                                 [ "...", "Functions", ".", { "label": "Function Code Size" } ]
+                             ],
+                             "view": "timeSeries",
+                             "stacked": false,
+                             "region": "us-east-2",
+                             "stat": "Maximum",
+                             "period": 21600,
+                             "title": "Lambda Code Storage",
+                             "annotations": {
+                                 "horizontal": [
+                                     {
+                                         "label": "Lambda Code Storage Quota",
+                                         "value": 75000000000
+                                     }
+                                 ]
+                             }
+                           }
+                         }
+                    ]
+        }
             
